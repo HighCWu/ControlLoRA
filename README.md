@@ -10,7 +10,7 @@ You could download some pretrained models from [huggingface](https://huggingface
 
 ## How To Train
 
-Refer to the script in the `tasks` directory. I highly refer the training code from [diffusers](https://github.com/huggingface/diffusers).
+Refer to the script in the `tasks` directory. I highly refer to the training code from [diffusers](https://github.com/huggingface/diffusers).
 
 You could add or modify config file in the `configs` directory to custom the ControlLoRA model architecture. To enhance the effect of the model, you could change some blocks to other residual block types of diffusers and you could increase the number of layers of blocks by modify the config files.
 
@@ -33,6 +33,8 @@ Stable Diffusion 1.5 + ControlLoRA (using simple Canny edge detection)
 
     python gradio_canny2image.py
 
+Highly refered to the ControlNet codes.
+
 The Gradio app also allows you to change the Canny edge thresholds. Just try it for more details.
 
 
@@ -49,6 +51,8 @@ Prompt: "cute dog"
 Stable Diffusion 1.5 + ControlLoRA (using human pose)
 
     python gradio_pose2image.py
+
+Highly refered to the ControlNet codes.
 
 Apparently, this model deserves a better UI to directly manipulate pose skeleton. However, again, Gradio is somewhat difficult to customize. Right now you need to input an image and then the Openpose will detect the pose for you.
 
