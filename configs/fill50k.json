@@ -1,0 +1,92 @@
+{
+  "_class_name": "ControlLoRA",
+  "_diffusers_version": "0.13.0.dev0",
+  "act_fn": "silu",
+  "block_out_channels": [
+    32,
+    64,
+    128,
+    256
+  ],
+  "down_block_types": [
+    "SimpleDownEncoderBlock2D",
+    "SimpleDownEncoderBlock2D",
+    "SimpleDownEncoderBlock2D",
+    "SimpleDownEncoderBlock2D"
+  ],
+  "in_channels": 3,
+  "layers_per_block": 1,
+  "lora_block_in_channels": [
+    256,
+    256,
+    256,
+    256
+  ],
+  "lora_block_out_channels": [
+    320,
+    640,
+    1280,
+    1280
+  ],
+  "lora_control_rank": null,
+  "lora_cross_attention_dims": [
+    [
+      null,
+      768,
+      null,
+      768,
+      null,
+      768,
+      null,
+      768,
+      null,
+      768
+    ],
+    [
+      null,
+      768,
+      null,
+      768,
+      null,
+      768,
+      null,
+      768,
+      null,
+      768
+    ],
+    [
+      null,
+      768,
+      null,
+      768,
+      null,
+      768,
+      null,
+      768,
+      null,
+      768
+    ],
+    [
+      null,
+      768
+    ]
+  ],
+  "lora_post_add": false,
+  "lora_pre_conv_layers_kernel_size": 1,
+  "lora_pre_conv_layers_per_block": 1,
+  "lora_pre_conv_types": [
+    "SimpleDownEncoderBlock2D",
+    "SimpleDownEncoderBlock2D",
+    "SimpleDownEncoderBlock2D",
+    "SimpleDownEncoderBlock2D"
+  ],
+  "lora_pre_down_block_types": [
+    null,
+    "SimpleDownEncoderBlock2D",
+    "SimpleDownEncoderBlock2D",
+    "SimpleDownEncoderBlock2D"
+  ],
+  "lora_pre_down_layers_per_block": 1,
+  "lora_rank": 4,
+  "norm_num_groups": 32
+}
