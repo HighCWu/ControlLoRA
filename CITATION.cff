@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below."
 authors:
 - family-names: "Wu"
   given-names: "Hecong"
-title: "ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Inforamation"
+title: "ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Information"
 version: 1.0.0
 date-released: 2023-2-18
 url: "https://github.com/github/linguist"

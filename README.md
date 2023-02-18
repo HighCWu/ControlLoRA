@@ -1,4 +1,4 @@
-# ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Inforamation
+# ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Information
 
 By combining the ideas of [lllyasviel/ControlNet](https://github.com/lllyasviel/ControlNet) and [cloneofsimo/lora](https://github.com/cloneofsimo/lora), we can easily fine-tune stable diffusion to achieve the purpose of controlling its spatial information, with ControlLoRA, a simple and small (~7M parameters, ~25M storage space) network.
 
@@ -75,7 +75,7 @@ Discord: [AI Players - AI Dream Bakery](https://discord.gg/zcJszfPrZs)
     @software{wu2023controllora,
         author = {Wu Hecong},
         month = {2},
-        title = {{ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Inforamation}},
+        title = {{ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Information}},
         url = {https://github.com/HighCWu/ControlLoRA},
         version = {1.0.0},
         year = {2023}
