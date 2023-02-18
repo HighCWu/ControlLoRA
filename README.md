@@ -1,5 +1,7 @@
 # ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Information
 
+EN | [中文](./README_CN.md)
+
 By combining the ideas of [lllyasviel/ControlNet](https://github.com/lllyasviel/ControlNet) and [cloneofsimo/lora](https://github.com/cloneofsimo/lora), we can easily fine-tune stable diffusion to achieve the purpose of controlling its spatial information, with ControlLoRA, a simple and small (~7M parameters, ~25M storage space) network.
 
 ControlNet is large and it's not easy to send to your friends. With the idea of LoRA, we don't even need to transfer the entire stable diffusion model. Use the 25M ControlLoRA to save your time. 
@@ -31,7 +33,7 @@ You could add or modify config file in the `configs` directory to custom the Con
 
 Stable Diffusion 1.5 + ControlLoRA (using simple Canny edge detection)
 
-    python gradio_canny2image.py
+    python apps/gradio_canny2image.py
 
 Highly refered to the ControlNet codes.
 
@@ -50,7 +52,7 @@ Prompt: "cute dog"
 
 Stable Diffusion 1.5 + ControlLoRA (using human pose)
 
-    python gradio_pose2image.py
+    python apps/gradio_pose2image.py
 
 Highly refered to the ControlNet codes.
 
