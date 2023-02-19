@@ -37,7 +37,7 @@ from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 from models import ControlLoRA
-from PIL import Image
+from process import DatasetBase as dataset_cls
 
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
@@ -511,61 +511,6 @@ def main():
         eps=args.adam_epsilon,
     )
 
-    # Get the datasets: you can either provide your own training and evaluation files (see below)
-    # or specify a Dataset from the hub (the dataset will be downloaded automatically from the datasets Hub).
-
-    # In distributed training, the load_dataset function guarantees that only one local process can concurrently
-    # download the dataset.
-    if args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
-        dataset = load_dataset(
-            args.dataset_name,
-            args.dataset_config_name,
-            cache_dir=args.cache_dir,
-        )
-    else:
-        data_files = {}
-        if args.train_data_dir is not None:
-            data_files["train"] = os.path.join(args.train_data_dir, "**")
-        dataset = load_dataset(
-            "imagefolder",
-            data_files=data_files,
-            cache_dir=args.cache_dir,
-        )
-        # See more about loading custom images at
-        # https://huggingface.co/docs/datasets/v2.4.0/en/image_load#imagefolder
-
-    # Preprocessing the datasets.
-    # We need to tokenize inputs and targets.
-    column_names = dataset["train"].column_names
-
-    # 6. Get the column names for input/target.
-    dataset_columns = DATASET_NAME_MAPPING.get(args.dataset_name, None)
-    if args.image_column is None:
-        image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
-    else:
-        image_column = args.image_column
-        if image_column not in column_names:
-            raise ValueError(
-                f"--image_column' value '{args.image_column}' needs to be one of: {', '.join(column_names)}"
-            )
-    if args.guide_column is None:
-        guide_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
-    else:
-        guide_column = args.guide_column
-        if guide_column not in column_names:
-            raise ValueError(
-                f"--guide_column' value '{args.guide_column}' needs to be one of: {', '.join(column_names)}"
-            )
-    if args.caption_column is None:
-        caption_column = dataset_columns[2] if dataset_columns is not None else column_names[2]
-    else:
-        caption_column = args.caption_column
-        if caption_column not in column_names:
-            raise ValueError(
-                f"--caption_column' value '{args.caption_column}' needs to be one of: {', '.join(column_names)}"
-            )
-
     # Preprocessing the datasets.
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples, is_train=True):
@@ -585,51 +530,116 @@ def main():
         )
         return inputs.input_ids
 
-    # Preprocessing the datasets.
-    train_transforms = transforms.Compose(
-        [
-            transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.CenterCrop(args.resolution), # TODO we need to random crop with image and guide at the same time
-            transforms.ToTensor(),
-            transforms.Normalize([0.5], [0.5]),
-        ]
-    )
+    # Get the datasets: you can either provide your own training and evaluation files (see below)
+    # or specify a Dataset from the hub (the dataset will be downloaded automatically from the datasets Hub).
 
-    def preprocess_train(examples):
-        images, guides = [], []
-        for image, guide in zip(examples[image_column], examples[guide_column]):
-            image, guide = image.convert("RGB"), guide.convert("RGB")
-            image, guide = train_transforms(image), train_transforms(guide)
-            c, h, w = image.shape
-            y1, x1 = 0, 0
-            if h != args.resolution:
-                y1 = torch.randint(0, h - args.resolution, (1, )).item()
-            elif w != args.resolution:
-                x1 = torch.randint(0, w - args.resolution, (1, )).item()
-            y2, x2 = y1 + args.resolution, x1 + args.resolution
-            image = image[:,y1:y2,x1:x2]
-            guide = guide[:,y1:y2,x1:x2]
-            images.append(image)
-            guides.append(guide)
-            
-        examples["pixel_values"] = images
-        examples["guide_values"] = guides
-        examples["input_ids"] = tokenize_captions(examples)
-        return examples
+    # In distributed training, the load_dataset function guarantees that only one local process can concurrently
+    # download the dataset.
+    global dataset_cls
+    use_custom_dataset = False
+    if args.dataset_name.startswith('process/'):
+        # Use custom dataset define in process
+        use_custom_dataset = True
+        dataset_cls = dataset_cls.from_name(args.dataset_name)
+        dataset = dataset_cls(tokenize_captions, resolution=args.resolution, use_crop=True)
+    elif args.dataset_name is not None:
+        # Downloading and loading a dataset from the hub.
+        dataset = load_dataset(
+            args.dataset_name,
+            args.dataset_config_name,
+            cache_dir=args.cache_dir,
+        )
+    else:
+        data_files = {}
+        if args.train_data_dir is not None:
+            data_files["train"] = os.path.join(args.train_data_dir, "**")
+        dataset = load_dataset(
+            "imagefolder",
+            data_files=data_files,
+            cache_dir=args.cache_dir,
+        )
+        # See more about loading custom images at
+        # https://huggingface.co/docs/datasets/v2.4.0/en/image_load#imagefolder
 
-    with accelerator.main_process_first():
-        if args.max_train_samples is not None:
-            dataset["train"] = dataset["train"].shuffle(seed=args.seed).select(range(args.max_train_samples))
-        # Set the training transforms
-        train_dataset = dataset["train"].with_transform(preprocess_train)
+    if use_custom_dataset:
+        collate_fn = None
+    else:
+        # Preprocessing the datasets.
+        # We need to tokenize inputs and targets.
+        column_names = dataset["train"].column_names
 
-    def collate_fn(examples):
-        pixel_values = torch.stack([example["pixel_values"] for example in examples])
-        pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
-        guide_values = torch.stack([example["guide_values"] for example in examples])
-        guide_values = guide_values.to(memory_format=torch.contiguous_format).float()
-        input_ids = torch.stack([example["input_ids"] for example in examples])
-        return {"pixel_values": pixel_values, "guide_values": guide_values, "input_ids": input_ids}
+        # 6. Get the column names for input/target.
+        dataset_columns = DATASET_NAME_MAPPING.get(args.dataset_name, None)
+        if args.image_column is None:
+            image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
+        else:
+            image_column = args.image_column
+            if image_column not in column_names:
+                raise ValueError(
+                    f"--image_column' value '{args.image_column}' needs to be one of: {', '.join(column_names)}"
+                )
+        if args.guide_column is None:
+            guide_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
+        else:
+            guide_column = args.guide_column
+            if guide_column not in column_names:
+                raise ValueError(
+                    f"--guide_column' value '{args.guide_column}' needs to be one of: {', '.join(column_names)}"
+                )
+        if args.caption_column is None:
+            caption_column = dataset_columns[2] if dataset_columns is not None else column_names[2]
+        else:
+            caption_column = args.caption_column
+            if caption_column not in column_names:
+                raise ValueError(
+                    f"--caption_column' value '{args.caption_column}' needs to be one of: {', '.join(column_names)}"
+                )
+
+        # Preprocessing the datasets.
+        train_transforms = transforms.Compose(
+            [
+                transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
+                transforms.CenterCrop(args.resolution), # TODO we need to random crop with image and guide at the same time
+                transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5]),
+            ]
+        )
+
+        def preprocess_train(examples):
+            images, guides = [], []
+            for image, guide in zip(examples[image_column], examples[guide_column]):
+                image, guide = image.convert("RGB"), guide.convert("RGB")
+                image, guide = train_transforms(image), train_transforms(guide)
+                c, h, w = image.shape
+                y1, x1 = 0, 0
+                if h != args.resolution:
+                    y1 = torch.randint(0, h - args.resolution, (1, )).item()
+                elif w != args.resolution:
+                    x1 = torch.randint(0, w - args.resolution, (1, )).item()
+                y2, x2 = y1 + args.resolution, x1 + args.resolution
+                image = image[:,y1:y2,x1:x2]
+                guide = guide[:,y1:y2,x1:x2]
+                images.append(image)
+                guides.append(guide)
+                
+            examples["pixel_values"] = images
+            examples["guide_values"] = guides
+            examples["input_ids"] = tokenize_captions(examples)
+            return examples
+
+        with accelerator.main_process_first():
+            if args.max_train_samples is not None:
+                dataset["train"] = dataset["train"].shuffle(seed=args.seed).select(range(args.max_train_samples))
+            # Set the training transforms
+            train_dataset = dataset["train"].with_transform(preprocess_train)
+
+        def collate_fn(examples):
+            pixel_values = torch.stack([example["pixel_values"] for example in examples])
+            pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
+            guide_values = torch.stack([example["guide_values"] for example in examples])
+            guide_values = guide_values.to(memory_format=torch.contiguous_format).float()
+            input_ids = torch.stack([example["input_ids"] for example in examples])
+            return {"pixel_values": pixel_values, "guide_values": guide_values, "input_ids": input_ids}
 
     # DataLoaders creation:
     train_dataloader = torch.utils.data.DataLoader(
@@ -766,12 +776,7 @@ def main():
             guide = batch["guide_values"].to(accelerator.device)
             _ = control_lora(guide).control_states
             image = pipeline(args.validation_prompt, num_inference_steps=30, generator=generator).images[0]
-            guide = np.uint8(((guide + 1) / 2 * 127.5)[0].permute(1,2,0).cpu().numpy())
-            guide = Image.fromarray(guide).convert('RGB').resize(image.size)
-            image_cat = Image.new('RGB', (image.size[0]*2,image.size[1]), (0,0,0))
-            image_cat.paste(guide,(0,0))
-            image_cat.paste(image,(image.size[0], 0))
-            image = image_cat
+            image = dataset_cls.cat_input(image, guide)
             image.save(os.path.join("samples", output_dir, f"{i}.png"))
 
 

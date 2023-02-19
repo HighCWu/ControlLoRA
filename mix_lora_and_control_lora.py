@@ -162,7 +162,7 @@ def main():
             guide = batch["guide_values"].to('cuda')
             _ = control_lora(guide).control_states
             image = pipeline(validation_prompt, num_inference_steps=30, generator=generator).images[0]
-            guide = np.uint8(((guide + 1) / 2 * 127.5)[0].permute(1,2,0).cpu().numpy())
+            guide = np.uint8(((guide + 1) * 127.5)[0].permute(1,2,0).cpu().numpy())
             guide = Image.fromarray(guide).convert('RGB').resize(image.size)
             image_cat = Image.new('RGB', (image.size[0]*2,image.size[1]), (0,0,0))
             image_cat.paste(guide,(0,0))
