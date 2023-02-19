@@ -85,8 +85,9 @@ class Dataset(base.Dataset):
         color_img = torch.tensor(hint_npy_img.copy()).float().permute(2,0,1)
         color_img = torch.nn.functional.interpolate(color_img[None], size=guide_img.shape[-2:])[0].detach()
         cond_img = torch.cat([guide_img, color_img], 0).float()
+        input_ids = self.tokenizer({"text": [item["text"]]})[0]
 
-        return { "pixel_values": img, "guide_values": cond_img, "input_ids": self.tokenizer(item["text"]) }
+        return { "pixel_values": img, "guide_values": cond_img, "input_ids": input_ids }
 
     @staticmethod
     def control_channel():

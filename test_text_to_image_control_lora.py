@@ -563,6 +563,8 @@ def main():
 
     if use_custom_dataset:
         collate_fn = None
+        train_dataset = dataset
+        caption_column = args.caption_column
     else:
         # Preprocessing the datasets.
         # We need to tokenize inputs and targets.

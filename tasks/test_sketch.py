@@ -2,12 +2,10 @@ import os
 
 os.chdir(os.path.join(os.path.dirname(__file__), '..'))
 
-validation_prompt = ("masterpiece, best quality, "
-"1girl, green hair, sweater, looking at viewer, "
-"upper body, beanie, outdoors, watercolor, night, turtleneck")
+validation_prompt = ("1girl")
 
 cmd = rf'''accelerate launch --mixed_precision="fp16" test_text_to_image_control_lora.py \
-  --pretrained_model_name_or_path="hakurei/waifu-diffusion" \
+  --pretrained_model_name_or_path="ckpt/anything-v4.5" \
   --dataset_name="process/danbooru_sketch" --caption_column="text" \
   --resolution=512 \
   --num_train_epochs=6 --resume_from_checkpoint="latest" \
