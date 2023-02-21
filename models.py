@@ -554,7 +554,10 @@ class ControlLoRA(ModelMixin, ConfigMixin):
         for down_block, pre_lora_layer, lora_layer_list in zip(
             self.down_blocks, self.pre_lora_layers, self.lora_layers):
             h = down_block(h)
-            control_states = pre_lora_layer(h).to(orig_dtype)
+            control_states = pre_lora_layer(h)
+            if isinstance(control_states, tuple):
+                control_states = control_states[0]
+            control_states = control_states.to(orig_dtype)
             for lora_layer in lora_layer_list:
                 lora_layer.inject_control_states(control_states)
             control_states_list.append(control_states)

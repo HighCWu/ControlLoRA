@@ -32,7 +32,12 @@ from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
 import diffusers
-from diffusers import AutoencoderKL, DDPMScheduler, DiffusionPipeline, UNet2DConditionModel
+from diffusers import (
+    AutoencoderKL, 
+    DDPMScheduler, 
+    DPMSolverMultistepScheduler, 
+    DiffusionPipeline, 
+    UNet2DConditionModel)
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
@@ -803,6 +808,57 @@ def main():
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
 
+                        if args.validation_prompt is not None:
+                            logger.info(
+                                f"Running sampling... \n Generating {args.num_validation_images} images with prompt:"
+                                f" {args.validation_prompt}."
+                            )
+                            # create pipeline
+                            pipeline = DiffusionPipeline.from_pretrained(
+                                args.pretrained_model_name_or_path,
+                                unet=accelerator.unwrap_model(unet),
+                                revision=args.revision,
+                                torch_dtype=weight_dtype,
+                            )
+                            pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
+                            pipeline = pipeline.to(accelerator.device)
+                            pipeline.set_progress_bar_config(disable=True)
+
+                            # run inference
+                            generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
+                            images = []
+                            for _ in range(args.num_validation_images):
+                                with torch.no_grad():
+                                    try:
+                                        batch = next(val_iter)
+                                    except:
+                                        val_iter = iter(val_dataloader)
+                                        batch = next(val_iter)
+                                    target = batch["pixel_values"].to(dtype=weight_dtype)
+                                    guide = batch["guide_values"].to(accelerator.device)
+                                    _ = control_lora(guide).control_states
+                                    image = pipeline(
+                                        args.validation_prompt, num_inference_steps=30, generator=generator).images[0]
+                                    image = dataset_cls.cat_input(image, target, guide)
+                                images.append(image)
+
+                            for tracker in accelerator.trackers:
+                                if tracker.name == "tensorboard":
+                                    np_images = np.stack([np.asarray(img) for img in images])
+                                    tracker.writer.add_images("sampling", np_images, epoch, dataformats="NHWC")
+                                if tracker.name == "wandb":
+                                    tracker.log(
+                                        {
+                                            "sampling": [
+                                                wandb.Image(image, caption=f"{i}: {args.validation_prompt}")
+                                                for i, image in enumerate(images)
+                                            ]
+                                        }
+                                    )
+
+                            del pipeline
+                            torch.cuda.empty_cache()
+
             logs = {"step_loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
 
@@ -822,6 +878,7 @@ def main():
                     revision=args.revision,
                     torch_dtype=weight_dtype,
                 )
+                pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
                 pipeline = pipeline.to(accelerator.device)
                 pipeline.set_progress_bar_config(disable=True)
 
@@ -835,10 +892,11 @@ def main():
                         except:
                             val_iter = iter(val_dataloader)
                             batch = next(val_iter)
+                        target = batch["pixel_values"].to(dtype=weight_dtype)
                         guide = batch["guide_values"].to(accelerator.device)
                         _ = control_lora(guide).control_states
                         image = pipeline(args.validation_prompt, num_inference_steps=30, generator=generator).images[0]
-                        image = dataset_cls.cat_input(image, guide)
+                        image = dataset_cls.cat_input(image, target, guide)
                     images.append(image)
 
                 if accelerator.is_main_process:
@@ -883,6 +941,7 @@ def main():
     pipeline = DiffusionPipeline.from_pretrained(
         args.pretrained_model_name_or_path, revision=args.revision, torch_dtype=weight_dtype
     )
+    pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
     pipeline = pipeline.to(accelerator.device)
 
     # load attention processors
@@ -916,10 +975,11 @@ def main():
             except:
                 val_iter = iter(val_dataloader)
                 batch = next(val_iter)
+            target = batch["pixel_values"].to(dtype=weight_dtype)
             guide = batch["guide_values"].to(accelerator.device)
             _ = control_lora(guide).control_states
             image = pipeline(args.validation_prompt, num_inference_steps=30, generator=generator).images[0]
-            image = dataset_cls.cat_input(image, guide)
+            image = dataset_cls.cat_input(image, target, guide)
         images.append(image)
 
     if accelerator.is_main_process:

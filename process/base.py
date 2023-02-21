@@ -25,11 +25,14 @@ class Dataset(data.Dataset):
         return 3
 
     @staticmethod
-    def cat_input(image: Image.Image, guide: torch.Tensor):
+    def cat_input(image: Image.Image, target: torch.Tensor, guide: torch.Tensor):
+        target = np.uint8(((target + 1) * 127.5)[0].permute(1,2,0).cpu().numpy().clip(0,255))
         guide = np.uint8(((guide + 1) * 127.5)[0].permute(1,2,0).cpu().numpy().clip(0,255))
+        target = Image.fromarray(target).convert('RGB').resize(image.size)
         guide = Image.fromarray(guide).convert('RGB').resize(image.size)
-        image_cat = Image.new('RGB', (image.size[0]*2,image.size[1]), (0,0,0))
-        image_cat.paste(guide,(0,0))
-        image_cat.paste(image,(image.size[0], 0))
+        image_cat = Image.new('RGB', (image.size[0]*3,image.size[1]), (0,0,0))
+        image_cat.paste(target,(0,0))
+        image_cat.paste(guide,(image.size[0], 0))
+        image_cat.paste(image,(image.size[0]*2, 0))
 
         return image_cat

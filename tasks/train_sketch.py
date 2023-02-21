@@ -5,7 +5,7 @@ os.chdir(os.path.join(os.path.dirname(__file__), '..'))
 validation_prompt = ("1girl")
 
 cmd = rf'''accelerate launch --mixed_precision="fp16" train_text_to_image_control_lora.py \
-  --pretrained_model_name_or_path="ckpt/anything-v4.5" \
+  --pretrained_model_name_or_path="ckpt/anything-v3-vae-swapped" \
   --dataset_name="process/danbooru_sketch" --caption_column="text" \
   --resolution=512 \
   --train_batch_size=1 \

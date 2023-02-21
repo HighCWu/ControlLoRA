@@ -32,7 +32,12 @@ from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
 import diffusers
-from diffusers import AutoencoderKL, DDPMScheduler, DiffusionPipeline, UNet2DConditionModel
+from diffusers import (
+    AutoencoderKL, 
+    DDPMScheduler, 
+    DPMSolverMultistepScheduler, 
+    DiffusionPipeline, 
+    UNet2DConditionModel)
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
@@ -740,6 +745,7 @@ def main():
     pipeline = DiffusionPipeline.from_pretrained(
         args.pretrained_model_name_or_path, revision=args.revision, torch_dtype=weight_dtype, safety_checker=None
     )
+    pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
     pipeline = pipeline.to(accelerator.device)
 
     # load attention processors
@@ -775,10 +781,11 @@ def main():
             except:
                 val_iter = iter(val_dataloader)
                 batch = next(val_iter)
+            target = batch["pixel_values"].to(dtype=weight_dtype)
             guide = batch["guide_values"].to(accelerator.device)
             _ = control_lora(guide).control_states
             image = pipeline(args.validation_prompt, num_inference_steps=30, generator=generator).images[0]
-            image = dataset_cls.cat_input(image, guide)
+            image = dataset_cls.cat_input(image, target, guide)
             image.save(os.path.join("samples", output_dir, f"{i}.png"))
 
 
