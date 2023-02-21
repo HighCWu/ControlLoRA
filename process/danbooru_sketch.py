@@ -70,21 +70,21 @@ class Dataset(base.Dataset):
 
         npy_img = np.asarray(img).astype('float32')
         img = torch.tensor(npy_img.copy()).float().permute(2,0,1) / 127.5 - 1
-        guide_img = torch.tensor(guide_npy_img.copy())[None].float()
+        guide_img = torch.tensor(guide_npy_img.copy())[None].repeat(3,1,1).float()
         input_ids = self.tokenizer({"text": [item["text"]]})[0]
 
         return { "pixel_values": img, "guide_values": guide_img, "input_ids": input_ids }
 
     @staticmethod
     def control_channel():
-        return 1
+        return 3
 
     @staticmethod
     def cat_input(image: Image.Image, target: torch.Tensor, guide: torch.Tensor):
         target = np.uint8(((target + 1) * 127.5)[0].permute(1,2,0).cpu().numpy().clip(0,255))
         guide = np.uint8(((guide + 1) * 127.5)[0].permute(1,2,0).cpu().numpy().clip(0,255))
         target = Image.fromarray(target).convert('RGB').resize(image.size)
-        guide = Image.fromarray(guide[..., 0]).convert('RGB').resize(image.size)
+        guide = Image.fromarray(guide).convert('RGB').resize(image.size)
         image_cat = Image.new('RGB', (image.size[0]*3,image.size[1]), (0,0,0))
         image_cat.paste(target,(0,0))
         image_cat.paste(guide,(image.size[0],0))

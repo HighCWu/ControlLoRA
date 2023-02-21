@@ -14,7 +14,7 @@
     "SimpleDownEncoderBlock2D",
     "SimpleDownEncoderBlock2D"
   ],
-  "in_channels": 4,
+  "in_channels": 3,
   "layers_per_block": 1,
   "lora_block_in_channels": [
     256,
