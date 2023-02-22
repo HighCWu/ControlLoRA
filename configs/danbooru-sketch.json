@@ -28,7 +28,13 @@
     1280,
     1280
   ],
-  "lora_control_rank": null,
+  "lora_control_channels": [
+    256,
+    256,
+    256
+  ],
+  "lora_control_rank": 256,
+  "lora_control_self_add": false,
   "lora_cross_attention_dims": [
     [
       null,
@@ -72,8 +78,10 @@
     ]
   ],
   "lora_post_add": false,
+  "lora_concat_hidden": true,
   "lora_pre_conv_layers_kernel_size": 1,
   "lora_pre_conv_layers_per_block": 1,
+  "lora_pre_conv_skipped": true,
   "lora_pre_conv_types": [
     "SimpleDownEncoderBlock2D",
     "SimpleDownEncoderBlock2D",

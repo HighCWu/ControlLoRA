@@ -70,7 +70,15 @@ def get_down_block(
 
 
 class LoRACrossAttnProcessor(nn.Module):
-    def __init__(self, hidden_size, cross_attention_dim=None, rank=4, post_add=False):
+    def __init__(
+            self, 
+            hidden_size, 
+            cross_attention_dim=None, 
+            rank=4, 
+            post_add=False,
+            key_states_skipped=False,
+            value_states_skipped=False,
+            output_states_skipped=False):
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -79,11 +87,33 @@ class LoRACrossAttnProcessor(nn.Module):
         self.post_add = post_add
 
         self.to_q_lora = LoRALinearLayer(hidden_size, hidden_size, rank)
-        self.to_k_lora = LoRALinearLayer(
-            hidden_size if post_add else (cross_attention_dim or hidden_size), hidden_size, rank)
-        self.to_v_lora = LoRALinearLayer(
-            hidden_size if post_add else (cross_attention_dim or hidden_size), hidden_size, rank)
-        self.to_out_lora = LoRALinearLayer(hidden_size, hidden_size, rank)
+        if not key_states_skipped:
+            self.to_k_lora = LoRALinearLayer(
+                hidden_size if post_add else (cross_attention_dim or hidden_size), hidden_size, rank)
+        if not value_states_skipped:
+            self.to_v_lora = LoRALinearLayer(
+                hidden_size if post_add else (cross_attention_dim or hidden_size), hidden_size, rank)
+        if not output_states_skipped:
+            self.to_out_lora = LoRALinearLayer(hidden_size, hidden_size, rank)
+
+        self.key_states_skipped: bool = key_states_skipped
+        self.value_states_skipped: bool = value_states_skipped
+        self.output_states_skipped: bool = output_states_skipped
+
+    def skip_key_states(self, is_skipped: bool = True):
+        if is_skipped == False:
+            assert hasattr(self, 'to_k_lora')
+        self.key_states_skipped = is_skipped
+
+    def skip_value_states(self, is_skipped: bool = True):
+        if is_skipped == False:
+            assert hasattr(self, 'to_q_lora')
+        self.value_states_skipped = is_skipped
+
+    def skip_output_states(self, is_skipped: bool = True):
+        if is_skipped == False:
+            assert hasattr(self, 'to_out_lora')
+        self.output_states_skipped = is_skipped
 
     def __call__(
         self, attn: CrossAttention, hidden_states, encoder_hidden_states=None, attention_mask=None, scale=1.0
@@ -98,9 +128,11 @@ class LoRACrossAttnProcessor(nn.Module):
         encoder_hidden_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
 
         key = attn.to_k(encoder_hidden_states) 
-        key = key + scale * self.to_k_lora(key if self.post_add else encoder_hidden_states)
-        value = attn.to_v(encoder_hidden_states) 
-        value = value + scale * self.to_v_lora(value if self.post_add else encoder_hidden_states)
+        if not self.key_states_skipped:
+            key = key + scale * self.to_k_lora(key if self.post_add else encoder_hidden_states)
+        value = attn.to_v(encoder_hidden_states)
+        if not self.value_states_skipped:
+            value = value + scale * self.to_v_lora(value if self.post_add else encoder_hidden_states)
 
         key = attn.head_to_batch_dim(key)
         value = attn.head_to_batch_dim(value)
@@ -111,7 +143,8 @@ class LoRACrossAttnProcessor(nn.Module):
 
         # linear proj
         out = attn.to_out[0](hidden_states)
-        out = out + scale * self.to_out_lora(out if self.post_add else hidden_states)
+        if not self.output_states_skipped:
+            out = out + scale * self.to_out_lora(out if self.post_add else hidden_states)
         hidden_states = out
         # dropout
         hidden_states = attn.to_out[1](hidden_states)
@@ -120,14 +153,40 @@ class LoRACrossAttnProcessor(nn.Module):
 
 
 class ControlLoRACrossAttnProcessor(LoRACrossAttnProcessor):
-    def __init__(self, hidden_size, cross_attention_dim=None, rank=4, control_rank=None, post_add=False):
-        super().__init__(hidden_size, cross_attention_dim, rank, post_add=post_add)
+    def __init__(
+            self, 
+            hidden_size, 
+            cross_attention_dim=None, 
+            rank=4, 
+            control_rank=None, 
+            post_add=False, 
+            concat_hidden=False,
+            control_channels=None,
+            control_self_add=True,
+            key_states_skipped=False,
+            value_states_skipped=False,
+            output_states_skipped=False):
+        super().__init__(
+            hidden_size, 
+            cross_attention_dim, 
+            rank, 
+            post_add=post_add,
+            key_states_skipped=key_states_skipped,
+            value_states_skipped=value_states_skipped,
+            output_states_skipped=output_states_skipped)
 
         control_rank = rank if control_rank is None else control_rank
+        control_channels = hidden_size if control_channels is None else control_channels
+        self.concat_hidden = concat_hidden
+        self.control_self_add = control_self_add if control_channels is None else False
         self.control_states: torch.Tensor = None
-        self.to_control = LoRALinearLayer(hidden_size, hidden_size, control_rank)
-        self.pre_loras = []
-        self.post_loras = []
+
+        self.to_control = LoRALinearLayer(
+            control_channels + (hidden_size if concat_hidden else 0), 
+            hidden_size, 
+            control_rank)
+        self.pre_loras: List[LoRACrossAttnProcessor] = []
+        self.post_loras: List[LoRACrossAttnProcessor] = []
 
     def inject_pre_lora(self, lora_layer):
         self.pre_loras.append(lora_layer)
@@ -138,6 +197,27 @@ class ControlLoRACrossAttnProcessor(LoRACrossAttnProcessor):
     def inject_control_states(self, control_states):
         self.control_states = control_states
 
+    def process_control_states(self, hidden_states, scale=1.0):
+        control_states = self.control_states.to(hidden_states.dtype)
+        if hidden_states.ndim == 3 and control_states.ndim == 4:
+            batch, _, height, width = control_states.shape
+            control_states = control_states.permute(0, 2, 3, 1).reshape(batch, height * width, -1)
+            self.control_states = control_states
+        _control_states = control_states
+        if self.concat_hidden:
+            b1, b2 = control_states.shape[0], hidden_states.shape[0]
+            if b1 != b2:
+                control_states = control_states[:,None].repeat(1, b2//b1, *([1]*(len(control_states.shape)-1)))
+                control_states = control_states.view(-1, *control_states.shape[2:])
+            _control_states = torch.cat([hidden_states, control_states], -1)
+        _control_states = self.to_control(_control_states)
+        if self.control_self_add:
+            control_states = control_states + scale * _control_states
+        else:
+            control_states = _control_states
+
+        return control_states
+
     def __call__(
         self, attn: CrossAttention, hidden_states, encoder_hidden_states=None, attention_mask=None, scale=1.0
     ):
@@ -145,37 +225,43 @@ class ControlLoRACrossAttnProcessor(LoRACrossAttnProcessor):
         post_lora: LoRACrossAttnProcessor
         assert self.control_states is not None
 
-        control_states = self.control_states.to(hidden_states.dtype)
-        if hidden_states.ndim == 3 and control_states.ndim == 4:
-            batch, _, height, width = control_states.shape
-            control_states = control_states.permute(0, 2, 3, 1).reshape(batch, height * width, -1)
-            self.control_states = control_states
-        control_states = control_states + scale * self.to_control(control_states)
-
         batch_size, sequence_length, _ = hidden_states.shape
         attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length)
         query = attn.to_q(hidden_states)
         for pre_lora in self.pre_loras:
-            query = query + scale * pre_lora.to_q_lora(query if pre_lora.post_add else hidden_states)
-        query = query + scale * self.to_q_lora(query if self.post_add else (hidden_states + control_states))
+            lora_in = query if pre_lora.post_add else hidden_states
+            if isinstance(pre_lora, ControlLoRACrossAttnProcessor):
+                lora_in = lora_in + pre_lora.process_control_states(hidden_states, scale)
+            query = query + scale * pre_lora.to_q_lora(lora_in)
+        query = query + scale * self.to_q_lora((
+            query if self.post_add else hidden_states) + self.process_control_states(hidden_states, scale))
         for post_lora in self.post_loras:
-            query = query + scale * post_lora.to_q_lora(query if post_lora.post_add else hidden_states)
+            lora_in = query if post_lora.post_add else hidden_states
+            if isinstance(post_lora, ControlLoRACrossAttnProcessor):
+                lora_in = lora_in + post_lora.process_control_states(hidden_states, scale)
+            query = query + scale * post_lora.to_q_lora(lora_in)
         query = attn.head_to_batch_dim(query)
 
         encoder_hidden_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
 
         key = attn.to_k(encoder_hidden_states)
         for pre_lora in self.pre_loras:
-            key = key + scale * pre_lora.to_k_lora(key if pre_lora.post_add else encoder_hidden_states)
-        key = key + scale * self.to_k_lora(key if self.post_add else encoder_hidden_states)
+            if not pre_lora.key_states_skipped:
+                key = key + scale * pre_lora.to_k_lora(key if pre_lora.post_add else encoder_hidden_states)
+        if not self.key_states_skipped:
+            key = key + scale * self.to_k_lora(key if self.post_add else encoder_hidden_states)
         for post_lora in self.post_loras:
-            key = key + scale * post_lora.to_k_lora(key if post_lora.post_add else encoder_hidden_states)
+            if not post_lora.key_states_skipped:
+                key = key + scale * post_lora.to_k_lora(key if post_lora.post_add else encoder_hidden_states)
         value = attn.to_v(encoder_hidden_states)
         for pre_lora in self.pre_loras:
-            value = value + pre_lora.to_v_lora(value if pre_lora.post_add else encoder_hidden_states)
-        value = value + scale * self.to_v_lora(value if self.post_add else encoder_hidden_states)
+            if not pre_lora.value_states_skipped:
+                value = value + pre_lora.to_v_lora(value if pre_lora.post_add else encoder_hidden_states)
+        if not self.value_states_skipped:
+            value = value + scale * self.to_v_lora(value if self.post_add else encoder_hidden_states)
         for post_lora in self.post_loras:
-            value = value + post_lora.to_v_lora(value if post_lora.post_add else encoder_hidden_states)
+            if not post_lora.value_states_skipped:
+                value = value + post_lora.to_v_lora(value if post_lora.post_add else encoder_hidden_states)
 
         key = attn.head_to_batch_dim(key)
         value = attn.head_to_batch_dim(value)
@@ -187,10 +273,12 @@ class ControlLoRACrossAttnProcessor(LoRACrossAttnProcessor):
         # linear proj
         out = attn.to_out[0](hidden_states)
         for pre_lora in self.pre_loras:
-            out = out + scale * pre_lora.to_out_lora(out if pre_lora.post_add else hidden_states)
+            if not pre_lora.output_states_skipped:
+                out = out + scale * pre_lora.to_out_lora(out if pre_lora.post_add else hidden_states)
         out = out + scale * self.to_out_lora(out if self.post_add else hidden_states)
         for post_lora in self.post_loras:
-            out = out + scale * post_lora.to_out_lora(out if post_lora.post_add else hidden_states)
+            if not post_lora.output_states_skipped:
+                out = out + scale * post_lora.to_out_lora(out if post_lora.post_add else hidden_states)
         hidden_states = out
         # dropout
         hidden_states = attn.to_out[1](hidden_states)
@@ -404,6 +492,7 @@ class ControlLoRA(ModelMixin, ConfigMixin):
             "SimpleDownEncoderBlock2D",
         ),
         lora_pre_down_layers_per_block: int = 1,
+        lora_pre_conv_skipped: bool = False,
         lora_pre_conv_types: Tuple[str] = (
             "SimpleDownEncoderBlock2D",
             "SimpleDownEncoderBlock2D",
@@ -422,11 +511,21 @@ class ControlLoRA(ModelMixin, ConfigMixin):
         ),
         lora_rank: int = 4,
         lora_control_rank: int = None,
-        lora_post_add: bool = False
+        lora_post_add: bool = False,
+        lora_concat_hidden: bool = False,
+        lora_control_channels: Tuple[int] = (None, None, None, None),
+        lora_control_self_add: bool = True,
+        lora_key_states_skipped=False,
+        lora_value_states_skipped=False,
+        lora_output_states_skipped=False
     ):
         super().__init__()
 
         assert lora_block_in_channels[0] == block_out_channels[-1]
+        
+        if lora_pre_conv_skipped:
+            lora_control_channels = lora_block_in_channels
+            lora_control_self_add = False
 
         self.layers_per_block = layers_per_block
         self.lora_pre_down_layers_per_block = lora_pre_down_layers_per_block
@@ -466,7 +565,10 @@ class ControlLoRA(ModelMixin, ConfigMixin):
                 lora_pre_conv_types[0],
                 num_layers=self.lora_pre_conv_layers_per_block,
                 in_channels=lora_block_in_channels[0],
-                out_channels=lora_block_out_channels[0],
+                out_channels=(
+                    lora_block_out_channels[0] 
+                    if lora_control_channels[0] is None 
+                    else lora_control_channels[0]),
                 add_downsample=False,
                 resnet_eps=1e-6,
                 downsample_padding=0,
@@ -475,7 +577,7 @@ class ControlLoRA(ModelMixin, ConfigMixin):
                 attn_num_head_channels=None,
                 temb_channels=None,
                 resnet_kernel_size=lora_pre_conv_layers_kernel_size,
-            )
+            ) if not lora_pre_conv_skipped else nn.Identity()
         )
         self.lora_layers.append(
             nn.ModuleList([
@@ -484,7 +586,13 @@ class ControlLoRA(ModelMixin, ConfigMixin):
                     cross_attention_dim=cross_attention_dim, 
                     rank=lora_rank, 
                     control_rank=lora_control_rank,
-                    post_add=lora_post_add)
+                    post_add=lora_post_add,
+                    concat_hidden=lora_concat_hidden,
+                    control_channels=lora_control_channels[0],
+                    control_self_add=lora_control_self_add,
+                    key_states_skipped=lora_key_states_skipped,
+                    value_states_skipped=lora_value_states_skipped,
+                    output_states_skipped=lora_output_states_skipped)
                 for cross_attention_dim in lora_cross_attention_dims[0]
             ])
         )
@@ -517,7 +625,10 @@ class ControlLoRA(ModelMixin, ConfigMixin):
                     lora_pre_conv_types[i],
                     num_layers=self.lora_pre_conv_layers_per_block,
                     in_channels=output_channel,
-                    out_channels=lora_block_out_channels[i],
+                    out_channels=(
+                        lora_block_out_channels[i] 
+                        if lora_control_channels[i] is None 
+                        else lora_control_channels[i]),
                     add_downsample=False,
                     resnet_eps=1e-6,
                     downsample_padding=0,
@@ -526,7 +637,7 @@ class ControlLoRA(ModelMixin, ConfigMixin):
                     attn_num_head_channels=None,
                     temb_channels=None,
                     resnet_kernel_size=lora_pre_conv_layers_kernel_size,
-                )
+                ) if not lora_pre_conv_skipped else nn.Identity()
             )
             self.lora_layers.append(
                 nn.ModuleList([
@@ -535,7 +646,13 @@ class ControlLoRA(ModelMixin, ConfigMixin):
                         cross_attention_dim=cross_attention_dim, 
                         rank=lora_rank, 
                         control_rank=lora_control_rank,
-                        post_add=lora_post_add)
+                        post_add=lora_post_add,
+                        concat_hidden=lora_concat_hidden,
+                        control_channels=lora_control_channels[i],
+                        control_self_add=lora_control_self_add,
+                        key_states_skipped=lora_key_states_skipped,
+                        value_states_skipped=lora_value_states_skipped,
+                        output_states_skipped=lora_output_states_skipped)
                     for cross_attention_dim in lora_cross_attention_dims[i]
                 ])
             )

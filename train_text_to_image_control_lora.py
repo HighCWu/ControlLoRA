@@ -819,6 +819,7 @@ def main():
                                 unet=accelerator.unwrap_model(unet),
                                 revision=args.revision,
                                 torch_dtype=weight_dtype,
+                                safety_checker=None
                             )
                             pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
                             pipeline = pipeline.to(accelerator.device)
@@ -877,6 +878,7 @@ def main():
                     unet=accelerator.unwrap_model(unet),
                     revision=args.revision,
                     torch_dtype=weight_dtype,
+                    safety_checker=None
                 )
                 pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
                 pipeline = pipeline.to(accelerator.device)
@@ -939,7 +941,7 @@ def main():
     # Final inference
     # Load previous pipeline
     pipeline = DiffusionPipeline.from_pretrained(
-        args.pretrained_model_name_or_path, revision=args.revision, torch_dtype=weight_dtype
+        args.pretrained_model_name_or_path, revision=args.revision, torch_dtype=weight_dtype, safety_checker=None
     )
     pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
     pipeline = pipeline.to(accelerator.device)
