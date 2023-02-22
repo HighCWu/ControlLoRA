@@ -10,6 +10,10 @@ ControlNet很大，不容易发送给您的朋友。借用LoRA的思想，我们
 
 您可以从[huggingface](https://huggingface.co/HighCWu/ControlLoRA)下载一些预训练模型。注意openpose的训练我只用了100张MPII图片，所以模型效果不好。所以我建议你自己训练ControlLoRA。
 
+## 特性 & 新闻
+
+2023/02/22 - 添加ControlLora v2，将提示特征和空间信息进行分解，体积更小（~5M参数，~20M存储空间）。 您可以执行以下操作：在sd v1.5上进行训练，然后在Anything v3.0 上进行推理。
+
 ## 如何训练
 
 请参阅`tasks`目录中的脚本。我高度参考了[diffusers](https://github.com/huggingface/diffusers)的训练代码。

@@ -10,6 +10,10 @@ You could use gradio apps in the `apps` directory to try the pretrained models. 
 
 You could download some pretrained models from [huggingface](https://huggingface.co/HighCWu/ControlLoRA). Note that I only used 100 MPII pictures for the training of the openpose, so the model effect is not good. So I suggest you train your own ControlLoRA.
 
+## Features & News
+
+2023/02/22 - Add ControlLora v2, which decomposites the prompt features and the spatial information with smaller size (~5M parameters, ~20M storage space). You could do something like: training on sd v1.5 then inference on anything v3.0 .
+
 ## How To Train
 
 Refer to the script in the `tasks` directory. I highly refer to the training code from [diffusers](https://github.com/huggingface/diffusers).

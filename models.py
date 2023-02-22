@@ -165,7 +165,8 @@ class ControlLoRACrossAttnProcessor(LoRACrossAttnProcessor):
             control_self_add=True,
             key_states_skipped=False,
             value_states_skipped=False,
-            output_states_skipped=False):
+            output_states_skipped=False,
+            **kwargs):
         super().__init__(
             hidden_size, 
             cross_attention_dim, 
@@ -210,9 +211,9 @@ class ControlLoRACrossAttnProcessor(LoRACrossAttnProcessor):
                 control_states = control_states[:,None].repeat(1, b2//b1, *([1]*(len(control_states.shape)-1)))
                 control_states = control_states.view(-1, *control_states.shape[2:])
             _control_states = torch.cat([hidden_states, control_states], -1)
-        _control_states = self.to_control(_control_states)
+        _control_states = scale * self.to_control(_control_states)
         if self.control_self_add:
-            control_states = control_states + scale * _control_states
+            control_states = control_states + _control_states
         else:
             control_states = _control_states
 
@@ -271,6 +272,150 @@ class ControlLoRACrossAttnProcessor(LoRACrossAttnProcessor):
         hidden_states = attn.batch_to_head_dim(hidden_states)
 
         # linear proj
+        out = attn.to_out[0](hidden_states)
+        for pre_lora in self.pre_loras:
+            if not pre_lora.output_states_skipped:
+                out = out + scale * pre_lora.to_out_lora(out if pre_lora.post_add else hidden_states)
+        out = out + scale * self.to_out_lora(out if self.post_add else hidden_states)
+        for post_lora in self.post_loras:
+            if not post_lora.output_states_skipped:
+                out = out + scale * post_lora.to_out_lora(out if post_lora.post_add else hidden_states)
+        hidden_states = out
+        # dropout
+        hidden_states = attn.to_out[1](hidden_states)
+
+        return hidden_states
+
+
+
+
+class ControlLoRACrossAttnProcessorV2(LoRACrossAttnProcessor):
+    def __init__(
+            self, 
+            hidden_size, 
+            cross_attention_dim=None, 
+            rank=4, 
+            control_rank=None, 
+            control_channels=None,
+            **kwargs):
+        super().__init__(
+            hidden_size, 
+            cross_attention_dim, 
+            rank, 
+            post_add=False,
+            key_states_skipped=True,
+            value_states_skipped=True,
+            output_states_skipped=False)
+
+        control_rank = rank if control_rank is None else control_rank
+        control_channels = hidden_size if control_channels is None else control_channels
+        self.concat_hidden = True
+        self.control_self_add = False
+        self.control_states: torch.Tensor = None
+
+        self.to_control = LoRALinearLayer(
+            hidden_size + control_channels, 
+            hidden_size, 
+            control_rank)
+        self.to_control_out = LoRALinearLayer(
+            hidden_size + control_channels, 
+            hidden_size, 
+            control_rank)
+        self.pre_loras: List[LoRACrossAttnProcessor] = []
+        self.post_loras: List[LoRACrossAttnProcessor] = []
+
+    def inject_pre_lora(self, lora_layer):
+        self.pre_loras.append(lora_layer)
+    
+    def inject_post_lora(self, lora_layer):
+        self.post_loras.append(lora_layer)
+
+    def inject_control_states(self, control_states):
+        self.control_states = control_states
+
+    def process_control_states(self, hidden_states, scale=1.0, is_out=False):
+        control_states = self.control_states.to(hidden_states.dtype)
+        if hidden_states.ndim == 3 and control_states.ndim == 4:
+            batch, _, height, width = control_states.shape
+            control_states = control_states.permute(0, 2, 3, 1).reshape(batch, height * width, -1)
+            self.control_states = control_states
+        _control_states = control_states
+        if self.concat_hidden:
+            b1, b2 = control_states.shape[0], hidden_states.shape[0]
+            if b1 != b2:
+                control_states = control_states[:,None].repeat(1, b2//b1, *([1]*(len(control_states.shape)-1)))
+                control_states = control_states.view(-1, *control_states.shape[2:])
+            _control_states = torch.cat([hidden_states, control_states], -1)
+        _control_states = scale * (self.to_control_out if is_out else self.to_control)(_control_states)
+        if self.control_self_add:
+            control_states = control_states + _control_states
+        else:
+            control_states = _control_states
+
+        return control_states
+
+    def __call__(
+        self, attn: CrossAttention, hidden_states, encoder_hidden_states=None, attention_mask=None, scale=1.0
+    ):
+        pre_lora: LoRACrossAttnProcessor
+        post_lora: LoRACrossAttnProcessor
+        assert self.control_states is not None
+
+        batch_size, sequence_length, _ = hidden_states.shape
+        attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length)
+        for pre_lora in self.pre_loras:
+            if isinstance(pre_lora, ControlLoRACrossAttnProcessorV2):
+                hidden_states = hidden_states + pre_lora.process_control_states(hidden_states, scale)
+        hidden_states = hidden_states + self.process_control_states(hidden_states, scale)
+        for post_lora in self.post_loras:
+            if isinstance(post_lora, ControlLoRACrossAttnProcessorV2):
+                hidden_states = hidden_states + post_lora.process_control_states(hidden_states, scale)
+        query = attn.to_q(hidden_states)
+        for pre_lora in self.pre_loras:
+            lora_in = query if pre_lora.post_add else hidden_states
+            query = query + scale * pre_lora.to_q_lora(lora_in)
+        query = query + scale * self.to_q_lora(query if self.post_add else hidden_states)
+        for post_lora in self.post_loras:
+            lora_in = query if post_lora.post_add else hidden_states
+            query = query + scale * post_lora.to_q_lora(lora_in)
+        query = attn.head_to_batch_dim(query)
+
+        encoder_hidden_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
+
+        key = attn.to_k(encoder_hidden_states)
+        for pre_lora in self.pre_loras:
+            if not pre_lora.key_states_skipped:
+                key = key + scale * pre_lora.to_k_lora(key if pre_lora.post_add else encoder_hidden_states)
+        if not self.key_states_skipped:
+            key = key + scale * self.to_k_lora(key if self.post_add else encoder_hidden_states)
+        for post_lora in self.post_loras:
+            if not post_lora.key_states_skipped:
+                key = key + scale * post_lora.to_k_lora(key if post_lora.post_add else encoder_hidden_states)
+        value = attn.to_v(encoder_hidden_states)
+        for pre_lora in self.pre_loras:
+            if not pre_lora.value_states_skipped:
+                value = value + pre_lora.to_v_lora(value if pre_lora.post_add else encoder_hidden_states)
+        if not self.value_states_skipped:
+            value = value + scale * self.to_v_lora(value if self.post_add else encoder_hidden_states)
+        for post_lora in self.post_loras:
+            if not post_lora.value_states_skipped:
+                value = value + post_lora.to_v_lora(value if post_lora.post_add else encoder_hidden_states)
+
+        key = attn.head_to_batch_dim(key)
+        value = attn.head_to_batch_dim(value)
+
+        attention_probs = attn.get_attention_scores(query, key, attention_mask)
+        hidden_states = torch.bmm(attention_probs, value)
+        hidden_states = attn.batch_to_head_dim(hidden_states)
+
+        # linear proj
+        for pre_lora in self.pre_loras:
+            if isinstance(pre_lora, ControlLoRACrossAttnProcessorV2):
+                hidden_states = hidden_states + pre_lora.process_control_states(hidden_states, scale, is_out=True)
+        hidden_states = hidden_states + self.process_control_states(hidden_states, scale, is_out=True)
+        for post_lora in self.post_loras:
+            if isinstance(post_lora, ControlLoRACrossAttnProcessorV2):
+                hidden_states = hidden_states + post_lora.process_control_states(hidden_states, scale, is_out=True)
         out = attn.to_out[0](hidden_states)
         for pre_lora in self.pre_loras:
             if not pre_lora.output_states_skipped:
@@ -515,11 +660,16 @@ class ControlLoRA(ModelMixin, ConfigMixin):
         lora_concat_hidden: bool = False,
         lora_control_channels: Tuple[int] = (None, None, None, None),
         lora_control_self_add: bool = True,
-        lora_key_states_skipped=False,
-        lora_value_states_skipped=False,
-        lora_output_states_skipped=False
+        lora_key_states_skipped: bool = False,
+        lora_value_states_skipped: bool = False,
+        lora_output_states_skipped: bool = False,
+        lora_control_version: int = 1
     ):
         super().__init__()
+
+        lora_control_cls = ControlLoRACrossAttnProcessor
+        if lora_control_version == 2:
+            lora_control_cls = ControlLoRACrossAttnProcessorV2
 
         assert lora_block_in_channels[0] == block_out_channels[-1]
         
@@ -581,7 +731,7 @@ class ControlLoRA(ModelMixin, ConfigMixin):
         )
         self.lora_layers.append(
             nn.ModuleList([
-                ControlLoRACrossAttnProcessor(
+                lora_control_cls(
                     lora_block_out_channels[0], 
                     cross_attention_dim=cross_attention_dim, 
                     rank=lora_rank, 
@@ -641,7 +791,7 @@ class ControlLoRA(ModelMixin, ConfigMixin):
             )
             self.lora_layers.append(
                 nn.ModuleList([
-                    ControlLoRACrossAttnProcessor(
+                    lora_control_cls(
                         lora_block_out_channels[i], 
                         cross_attention_dim=cross_attention_dim, 
                         rank=lora_rank, 
