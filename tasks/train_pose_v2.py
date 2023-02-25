@@ -2,7 +2,10 @@ import os
 
 os.chdir(os.path.join(os.path.dirname(__file__), '..'))
 
-validation_prompt = ("1girl, 8 k, unreal engine")
+validation_prompt = ("girls are playing with a frisbee in a field, "
+"2009 cinematography, trending on artforum, running pose, "
+"bruce springsteen, connected to heart machines, with tattoos, "
+"beautiful - n 9, by Eric Dinyer, young child, midlands")
 
 cmd = rf'''accelerate launch --mixed_precision="fp16" train_text_to_image_control_lora.py \
   --pretrained_model_name_or_path="runwayml/stable-diffusion-v1-5" \
