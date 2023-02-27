@@ -4,7 +4,7 @@ os.chdir(os.path.join(os.path.dirname(__file__), '..'))
 
 INSTANCE_DIR = os.path.join('HighCWu', 'highcwu_v1').replace('\\', '/')
 
-validation_prompt = ("portrait of female HighCWu as a cute pink hair girl")
+validation_prompt = ("portrait of male HighCWu")
 
 cmd = rf'''accelerate launch train_dreambooth_lora.py \
   --pretrained_model_name_or_path="runwayml/stable-diffusion-v1-5"  \
