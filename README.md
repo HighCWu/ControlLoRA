@@ -39,7 +39,7 @@ Stable Diffusion 1.5 + ControlLoRA (using simple Canny edge detection)
 
     python apps/gradio_canny2image.py
 
-Highly refered to the ControlNet codes.
+Highly referred to the ControlNet codes.
 
 The Gradio app also allows you to change the Canny edge thresholds. Just try it for more details.
 
@@ -58,7 +58,7 @@ Stable Diffusion 1.5 + ControlLoRA (using human pose)
 
     python apps/gradio_pose2image.py
 
-Highly refered to the ControlNet codes.
+Highly referred to the ControlNet codes.
 
 Apparently, this model deserves a better UI to directly manipulate pose skeleton. However, again, Gradio is somewhat difficult to customize. Right now you need to input an image and then the Openpose will detect the pose for you.
 
