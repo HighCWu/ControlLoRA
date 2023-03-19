@@ -1,0 +1,119 @@
+model:
+  target: control_lora.models.ControlLoRAContainer
+  params:
+    in_channels: 3
+    down_block_types: 
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+    down_block_out_channels: [32, 64, 128, 256]
+    layers_per_block: 1
+    act_fn: silu
+    norm_num_groups: 32
+    post_down_block_types:
+      - null
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+    post_layers_per_block: 1
+    pre_control_types: 
+      - DownEncoderBlock2D
+      - DownEncoderBlock2D
+      - DownEncoderBlock2D
+      - DownEncoderBlock2D
+    pre_control_per_processor: 2
+    pre_control_kernel_size: 3
+    control_num_processors: [4, 4, 4, 2]
+    control_sizes: [256, 256, 512, 512]
+    control_out_channels: [320, 640, 1280, 1280]
+    rank: 128
+    concat_hidden: true
+    encoder_only: true
+
+dataset:
+  target: control_lora.datasets.MultiDataset
+  params:
+    is_imagefolder: false
+    instance_text: null
+    skip_guide: false
+    resolution: 512
+    data_types:
+      - target: control_lora.datasets.MixDataset
+        params:
+          path: data/mpii-preprocessed
+          enable_zoom_out: true
+          enable_zoom_in: true
+          resample_thres: 100
+          data_types:
+            - target: control_lora.datasets.CannyDataset
+              params:
+                index_in_mix: 1
+            - target: control_lora.datasets.BaseDataset # actually a openpose dataset but make by `examples/make_mpii_preprocessed.py`
+              params:
+                index_in_mix: 1
+            - target: control_lora.datasets.MidasDataset
+              params:
+                guide_type: depth
+                index_in_mix: 1
+      - target: control_lora.datasets.MixDataset
+        params:
+          path: data/laion-high-resolution-part
+          enable_zoom_out: true
+          enable_zoom_in: false
+          resample_thres: 100
+          data_types:
+            - target: control_lora.datasets.CannyDataset
+              params:
+                index_in_mix: 1
+                transparent_color_in_mix: [0, 0, 0]
+            # - target: control_lora.datasets.MLSDDataset
+            #   params:
+            #     index_in_mix: 2
+            #     transparent_color_in_mix: [0, 0, 0]
+            # - target: control_lora.datasets.HEDDataset
+            #   params:
+            #     index_in_mix: 3
+            #     transparent_color_in_mix: [0, 0, 0]
+            # - target: control_lora.datasets.ScribbleDataset
+            #   params:
+            #     index_in_mix: 4
+            #     transparent_color_in_mix: [0, 0, 0]
+            # - target: control_lora.datasets.UniformerDataset
+            #   params:
+            #     index_in_mix: 5
+            - target: control_lora.datasets.MidasDataset
+              params:
+                guide_type: depth
+                index_in_mix: 6
+            # - target: control_lora.datasets.MidasDataset
+            #   params:
+            #     guide_type: normal
+            #     index_in_mix: 7
+            - target: control_lora.datasets.OpenposeDataset
+              params:
+                index_in_mix: 9999
+                transparent_color_in_mix: [0, 0, 0]
+                always_keep_in_mix: true
+
+trainer:
+  target: control_lora.commands.trainer.Trainer
+  params:
+    pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
+    output_dir: ckpts/sd-v1-5-control-lora-encoder-only-mul-mix-high-resolution-part
+    train_batch_size: 1
+    gradient_accumulation_steps: 1
+    checkpointing_steps: 5000
+    sample_in_checkpointing: true
+    resume_from_checkpoint: latest
+    learning_rate: 0.00001
+    report_to: wandb
+    lr_scheduler: constant
+    lr_warmup_steps: 0
+    max_train_steps: 200000
+    validation_prompt: portrait of a cute pink hair girl
+    validation_epochs: -1
+    mixed_precision: 'fp16'
+    enable_xformers_memory_efficient_attention: false
+    seed: 42
+    num_sampling_images: 100

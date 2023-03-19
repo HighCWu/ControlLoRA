@@ -1,0 +1,67 @@
+model:
+  target: control_lora.models.ControlLoRAContainer
+  params:
+    in_channels: 3
+    down_block_types: 
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+    down_block_out_channels: [32, 64, 128, 256]
+    layers_per_block: 1
+    act_fn: silu
+    norm_num_groups: 32
+    post_down_block_types:
+      - null
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+    post_layers_per_block: 1
+    pre_control_types: 
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+      - SimpleDownEncoderBlock2D
+    pre_control_per_processor: 1
+    pre_control_kernel_size: 1
+    control_num_processors: [4, 4, 4, 2]
+    control_sizes: [256, 256, 256, 256]
+    control_out_channels: [320, 640, 1280, 1280]
+    rank: 4
+    concat_hidden: true
+    encoder_only: true
+
+dataset:
+  target: control_lora.datasets.CannyDataset
+  params:
+    path: data/mpii-preprocessed
+    is_imagefolder: false
+    instance_text: null
+    skip_guide: false
+    resolution: 512
+    enable_zoom_out: true
+    enable_zoom_in: true
+    resample_thres: 5000
+    random_rotate: true
+
+trainer:
+  target: control_lora.commands.trainer.Trainer
+  params:
+    pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
+    output_dir: ckpts/sd-v1-5-control-lora-encoder-only-mpii-canny
+    train_batch_size: 1
+    gradient_accumulation_steps: 1
+    checkpointing_steps: 5000
+    sample_in_checkpointing: true
+    resume_from_checkpoint: latest
+    learning_rate: 0.00001
+    report_to: wandb
+    lr_scheduler: constant
+    lr_warmup_steps: 0
+    max_train_steps: 100000
+    validation_prompt: portrait of a cute pink hair girl
+    validation_epochs: -1
+    mixed_precision: 'fp16'
+    enable_xformers_memory_efficient_attention: false
+    seed: 42
+    num_sampling_images: 100
