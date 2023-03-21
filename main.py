@@ -10,7 +10,8 @@ from control_lora.datasets import BaseDataset
 @click.option('--config', default='configs/base.yaml', help='Config file path')
 @click.option('--running_mode', default='train', help='Trainer running mode, [train | sample]')
 @click.option('--validation_prompt', default=None, help='Replace the default validation prompt')
-def main(config, running_mode, validation_prompt):
+@click.option('--pretrained_model_name_or_path', default=None, help='Replace the default pretrained model')
+def main(config, running_mode, validation_prompt, pretrained_model_name_or_path):
     objs = instantiate_from_config(config)
     trainer: Trainer
     model: ControlLoRAContainer
@@ -19,6 +20,8 @@ def main(config, running_mode, validation_prompt):
     trainer.args.running_mode = running_mode
     if validation_prompt is not None:
         trainer.args.validation_prompt = validation_prompt
+    if pretrained_model_name_or_path is not None:
+        trainer.args.pretrained_model_name_or_path = pretrained_model_name_or_path
     trainer.run(model=model, dataset=dataset)
 
 if __name__ == "__main__":

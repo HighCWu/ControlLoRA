@@ -40,7 +40,7 @@ def make_prompt():
                         "image": basename, 
                         "text": prompt}
                     )
-        with open(jlname + '.done', 'r+', encoding='utf-8') as f:
+        with open(jlname + '.done', 'w', encoding='utf-8') as f:
             f.write('Done.')
 
 # mpii

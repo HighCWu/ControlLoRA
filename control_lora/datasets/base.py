@@ -124,6 +124,7 @@ class BaseDataset(data.Dataset):
         self.base_name = base_name
         if base_name is None and self.path is not None:
             self.base_name = os.path.basename(path)
+            base_name = self.base_name
             if '.' in self.base_name:
                 self.base_name = base_name[:base_name.rfind('.')]
 

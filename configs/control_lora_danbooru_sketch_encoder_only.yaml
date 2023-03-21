@@ -32,32 +32,42 @@ model:
     encoder_only: true
 
 dataset:
-  target: control_lora.datasets.CannyDataset
+  target: control_lora.datasets.PairDataset
   params:
-    path: data/laion-high-resolution-part
-    is_imagefolder: false
-    instance_text: null
-    skip_guide: false
+    path: data/danbooru-2020-512.jsonl
     resolution: 512
     enable_zoom_out: true
     enable_zoom_in: true
+    guide_types:
+      - target: control_lora.datasets.BaseDataset
+        params:
+          path: data/danbooru-2020-512-erika.jsonl
+      - target: control_lora.datasets.BaseDataset
+        params:
+          path: data/danbooru-2020-512-illyasviel.jsonl
+      - target: control_lora.datasets.BaseDataset
+        params:
+          path: data/danbooru-2020-512-infor.jsonl
+      - target: control_lora.datasets.BaseDataset
+        params:
+          path: data/danbooru-2020-512-muko.jsonl
 
 trainer:
   target: control_lora.commands.trainer.Trainer
   params:
     pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
-    output_dir: ckpts/sd-v1-5-control-lora-encoder-only-canny-laion-high-resolution-part
+    output_dir: ckpts/sd-v1-5-control-lora-encoder-only-sketch-danbooru
     train_batch_size: 1
     gradient_accumulation_steps: 1
     checkpointing_steps: 5000
     sample_in_checkpointing: true
     resume_from_checkpoint: latest
-    learning_rate: 0.0001
+    learning_rate: 0.00001
     report_to: wandb
     lr_scheduler: constant
     lr_warmup_steps: 0
-    max_train_steps: 30000
-    validation_prompt: portrait of a cute pink hair girl
+    max_train_steps: 50000
+    validation_prompt: anime girl
     validation_epochs: -1
     mixed_precision: 'fp16'
     enable_xformers_memory_efficient_attention: false

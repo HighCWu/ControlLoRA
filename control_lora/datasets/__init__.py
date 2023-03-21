@@ -1,6 +1,7 @@
 from .base import BaseDataset
 from .mix import MixDataset
 from .multi import MultiDataset
+from .pair import PairDataset
 from .canny import CannyDataset
 from .mlsd import MLSDDataset
 from .hed import HEDDataset

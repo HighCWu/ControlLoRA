@@ -25,7 +25,7 @@ accelerate launch main.py --config configs/control_lora_multi_mix_encoder_only.y
 Fast sample by:
 
 ```sh
-accelerate launch main.py --config configs/control_lora_multi_mix_encoder_only.yaml --running_mode sample --validation_prompt <OTHER PROMPT>
+accelerate launch main.py --config configs/control_lora_multi_mix_encoder_only.yaml --running_mode sample --validation_prompt <OTHER PROMPT> --pretrained_model_name_or_path <OTHER MODEL, such as ckpt/anything-v3-vae-swapped> 
 ```
 
 I highly referred to the training code from [diffusers](https://github.com/huggingface/diffusers).
