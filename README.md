@@ -1,5 +1,7 @@
 # ControlLoRA: A Lightweight Neural Network To Control Stable Diffusion Spatial Information
 
+🎉 ControlLoRA Version 2 is available in [control-lora-2](https://github.com/HighCWu/control-lora-v2).
+
 EN | [中文](./README_CN.md)
 
 By combining the ideas of [lllyasviel/ControlNet](https://github.com/lllyasviel/ControlNet) and [cloneofsimo/lora](https://github.com/cloneofsimo/lora), we can easily fine-tune stable diffusion to achieve the purpose of controlling its spatial information, with ControlLoRA, a simple and small (~7M parameters, ~25M storage space) network.
