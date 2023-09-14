@@ -12,7 +12,7 @@ You could download some pretrained models from [huggingface](https://huggingface
 
 ## Features & News
 
-2023/02/22 - Add ControlLora v2, which decomposites the prompt features and the spatial information with smaller size (~5M parameters, ~20M storage space). You could do something like: training on sd v1.5 then inference on anything v3.0 .
+2023/02/22 - Add new ControlLora, which decomposites the prompt features and the spatial information with smaller size (~5M parameters, ~20M storage space). You could do something like: training on sd v1.5 then inference on anything v3.0 .
 
 ## How To Train
 
