@@ -1,5 +1,7 @@
 # ControlLoRA: 一个能够控制Stable Diffusion空间信息的轻量神经网络
 
+🎉 ControlLoRA Version 2 可以在[control-lora-2](https://github.com/HighCWu/control-lora-v2)上使用了.
+
 [EN](./README.md) | 中文
 
 通过结合[lllyasviel/ControlNet](https://github.com/lllyasviel/ControlNet)和[cloneofsimo/lora](https://github.com/cloneofsimo/lora)的思想，我们可以轻松地使用ControlLoRA，一个简单而小的（~7M 参数，~25M 存储空间）网络，来微调稳定扩散以达到控制其空间信息的目的。
@@ -12,7 +14,7 @@ ControlNet很大，不容易发送给您的朋友。借用LoRA的思想，我们
 
 ## 特性 & 新闻
 
-2023/02/22 - 添加ControlLora v2，将提示特征和空间信息进行分解，体积更小（~5M参数，~20M存储空间）。 您可以执行以下操作：在sd v1.5上进行训练，然后在Anything v3.0 上进行推理。
+2023/02/22 - 添加ControlLora新版本，将提示特征和空间信息进行分解，体积更小（~5M参数，~20M存储空间）。 您可以执行以下操作：在sd v1.5上进行训练，然后在Anything v3.0 上进行推理。
 
 ## 如何训练
 
@@ -85,7 +87,7 @@ Discord: [AI Players - AI Dream Bakery](https://discord.gg/zcJszfPrZs)
     @software{wu2023controllora,
         author = {Wu Hecong},
         month = {2},
-        title = {{ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Information}},
+        title = {{ControlLoRA: A Lightweight Neural Network To Control Stable Diffusion Spatial Information}},
         url = {https://github.com/HighCWu/ControlLoRA},
         version = {1.0.0},
         year = {2023}
