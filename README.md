@@ -1,4 +1,4 @@
-# ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Information
+# ControlLoRA: A Lightweight Neural Network To Control Stable Diffusion Spatial Information
 
 EN | [中文](./README_CN.md)
 
@@ -85,7 +85,7 @@ Discord: [AI Players - AI Dream Bakery](https://discord.gg/zcJszfPrZs)
     @software{wu2023controllora,
         author = {Wu Hecong},
         month = {2},
-        title = {{ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Information}},
+        title = {{ControlLoRA: A Lightweight Neural Network To Control Stable Diffusion Spatial Information}},
         url = {https://github.com/HighCWu/ControlLoRA},
         version = {1.0.0},
         year = {2023}
